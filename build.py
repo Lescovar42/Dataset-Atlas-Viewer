@@ -31,6 +31,7 @@ def bundle_native_library():
     native = ROOT / "native"
     native.mkdir(exist_ok=True)
     shutil.copy2(Path(paths.pop()), native / "libexpat.so.1")
+    shutil.copy2(ROOT / "licenses" / "Expat.txt", native / "COPYING")
     print("Bundled libexpat.so.1 for the function runtime.", flush=True)
 
 
