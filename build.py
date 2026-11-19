@@ -1,8 +1,11 @@
 """Prepare immutable viewer data and CDN assets during a deployment build."""
 
 from concurrent.futures import ThreadPoolExecutor
+import ctypes
+import ctypes.util
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import time
@@ -11,6 +14,24 @@ import urllib.request
 import zipfile
 
 from viewer import DEPLOYED, RAW, ROOT, prepare
+
+
+def bundle_native_library():
+    if os.name != "posix":
+        return
+    library = ctypes.util.find_library("expat")
+    if not library:
+        raise RuntimeError("The Linux build image must provide libexpat.so.1.")
+    ctypes.CDLL(library)
+    # /proc reports the resolved file even when ldconfig returns a soname.
+    mapped = Path("/proc/self/maps").read_text()
+    paths = {line.split()[-1] for line in mapped.splitlines() if "/libexpat.so." in line}
+    if len(paths) != 1:
+        raise RuntimeError("Could not resolve the build image's Expat shared library.")
+    native = ROOT / "native"
+    native.mkdir(exist_ok=True)
+    shutil.copy2(Path(paths.pop()), native / "libexpat.so.1")
+    print("Bundled libexpat.so.1 for the function runtime.", flush=True)
 
 
 def download_archive(item, base_url):
@@ -52,6 +73,7 @@ def extract_archive(archive):
 
 
 def main():
+    bundle_native_library()
     sources = json.loads((ROOT / "data-sources.json").read_text(encoding="utf-8"))
     RAW.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=3) as pool:

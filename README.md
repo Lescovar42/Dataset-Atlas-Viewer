@@ -24,6 +24,8 @@ Open http://127.0.0.1:8765. Existing extracted data under `data/raw/` is reused.
 
 During the build, `build.py` fetches six public MassGIS ZIP archives, verifies their SHA-256 checksums, extracts the imagery, and crops the 1 m label raster to the five image tiles. The function receives about 82 MiB of raster files, including the original compressed four-band JP2 images and small label pyramids. It reads these files without preparing data during requests. Browser scripts and styles are copied to `public/static/` for Vercel's CDN.
 
+The Linux build also bundles `libexpat.so.1`. The entrypoint loads it before importing Rasterio because Vercel's Lambda runtime omits this system library.
+
 The repository contains application code and a download manifest. Raw datasets, local preview caches, generated deployment files, virtual environments, and local settings are Git-ignored. A build requires outbound access to the MassGIS download service. Changed upstream archives cause a checksum error, which requires reviewing and updating `data-sources.json`.
 
 ## Verify preparation
