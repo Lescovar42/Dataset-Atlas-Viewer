@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Impervious surface dataset · Boston 2005</title>
+    <link rel="stylesheet" href="/static/vendor/leaflet.css" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script defer src="/static/vendor/leaflet.js"></script>
+    <script defer src="/static/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <span>Boston, Massachusetts · April 2005</span>
+      <span>MassGIS / USGS HRO</span>
+    </header>
+    <main class="workspace">
+      <aside class="sidebar">
+        <h1>Impervious surfaces</h1>
+        <div class="overview-stats">
+          <div><strong id="area-total">—</strong><span>coverage</span></div>
+          <div>
+            <strong id="impervious-total">—</strong><span>impervious</span>
+          </div>
+        </div>
+        <div class="section-heading">
+          <h2>Image tiles <span id="tile-count"></span></h2>
+          <button id="fit-all" class="text-button">View all</button>
+        </div>
+        <div id="tile-list" class="tile-list" aria-label="Image tiles"></div>
+        <section class="inspector" aria-live="polite">
+          <div class="section-heading">
+            <h2>Pixel inspector</h2>
+          </div>
+          <div id="inspector-content">
+            <p class="muted">
+              Click the image to read its reference label and original band
+              values.
+            </p>
+          </div>
+        </section>
+        <details class="source-details">
+          <summary>Dataset details</summary>
+          <dl>
+            <dt>Imagery</dt>
+            <dd>0.5 m · RGB + NIR · JP2</dd>
+            <dt>Reference labels</dt>
+            <dd>1 m · imp_ne6.img</dd>
+            <dt>Projection</dt>
+            <dd>NAD83 / Massachusetts Mainland<br />EPSG:26986</dd>
+          </dl>
+          <p>
+            Labels combine roofs, roads, parking lots, and other impervious
+            surfaces. Reference mapping includes added road buffers.
+          </p>
+          <p>
+            NDVI uses the original 8-bit image values. Display contrast changes
+            the preview only.
+          </p>
+          <a
+            href="https://www.mass.gov/info-details/massgis-data-impervious-surface-2005"
+            target="_blank"
+            rel="noreferrer"
+            >MassGIS source documentation</a
+          >
+        </details>
+      </aside>
+      <section class="map-section" aria-label="Georeferenced dataset map">
+        <div class="toolbar">
+          <div class="view-modes" role="group" aria-label="View mode">
+            <button data-view="image">Imagery</button
+            ><button data-view="overlay" class="active">Overlay</button
+            ><button data-view="label">Labels</button
+            ><button data-view="compare">Compare</button>
+          </div>
+          <div class="display-controls">
+            <label for="band-mode" class="sr-only">Band display</label
+            ><select id="band-mode">
+              <option value="rgb">Natural color</option>
+              <option value="infrared">Color infrared</option>
+              <option value="ndvi">NDVI</option></select
+            ><label class="check-label"
+              ><input id="enhance" type="checkbox" checked /> Enhance</label
+            >
+          </div>
+        </div>
+        <div id="map-wrap">
+          <div id="map"></div>
+          <div class="map-title">
+            <span id="map-title">All five tiles</span
+            ><span id="map-subtitle">80 km² · 0.5 m imagery</span>
+          </div>
+          <div class="map-buttons">
+            <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button
+            ><button id="zoom-out" title="Zoom out" aria-label="Zoom out">
+              −</button
+            ><button id="fit-map" title="Fit dataset" aria-label="Fit dataset">
+              ⌗
+            </button>
+          </div>
+          <div class="map-loading" id="map-loading">Loading imagery…</div>
+          <div id="compare-divider" class="compare-divider" hidden>
+            <div class="compare-handle">↔</div>
+          </div>
+          <div id="compare-caption" class="compare-caption" hidden>
+            <span>Imagery</span><span>Reference labels</span>
+          </div>
+          <div class="map-legend" id="map-legend">
+            <p id="legend-title">REFERENCE LABELS</p>
+            <div class="legend-classes">
+              <span><i class="swatch impervious"></i>Impervious <b>1</b></span
+              ><span
+                ><i class="swatch pervious"></i>Non-impervious <b>0</b></span
+              >
+            </div>
+            <div class="ndvi-legend" hidden>
+              <div></div>
+              <span>−1</span><span>0</span><span>+1</span>
+            </div>
+          </div>
+          <div id="error-toast" class="error-toast" role="alert" hidden></div>
+        </div>
+        <footer class="map-footer">
+          <div class="opacity-control">
+            <label for="opacity">Label opacity</label
+            ><input
+              id="opacity"
+              type="range"
+              min="0"
+              max="100"
+              value="50"
+            /><output id="opacity-value">50%</output>
+          </div>
+          <label class="check-label"
+            ><input id="boundaries" type="checkbox" checked /> Tile
+            boundaries</label
+          ><span id="coordinates">EPSG:26986</span>
+          <div class="scale">
+            <span id="scale-text">1 km</span><i id="scale-bar"></i>
+          </div>
+        </footer>
+      </section>
+    </main>
+    <div id="startup" class="startup">
+      <p>Opening the dataset…</p>
+    </div>
+  </body>
+</html>
