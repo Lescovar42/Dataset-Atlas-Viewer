@@ -5,7 +5,9 @@ from functools import lru_cache
 from io import BytesIO
 import json
 import math
+import os
 from pathlib import Path
+import shutil
 import threading
 
 from flask import Flask, abort, jsonify, request, send_file
@@ -21,10 +23,12 @@ from rasterio.windows import Window
 ROOT = Path(__file__).resolve().parent
 RAW = ROOT / "data" / "raw"
 CACHE = ROOT / "data" / "viewer_cache"
+DEPLOYED = ROOT / "data" / "deployed"
 CACHE_VERSION = 1
 app = Flask(__name__, static_folder=str(ROOT / "viewer"), static_url_path="/static")
 catalog = {}
 read_lock = threading.Lock()
+catalog_lock = threading.Lock()
 
 
 def write_pyramid(path, pixels, transform, crs, categorical=False):
@@ -43,20 +47,24 @@ def write_pyramid(path, pixels, transform, crs, categorical=False):
     temporary.replace(path)
 
 
-def prepare():
+def prepare(deployment=False):
     images = sorted(RAW.rglob("*.jp2"))
     labels = sorted(RAW.rglob("imp_ne6.img"))
     if not images or not labels:
         raise RuntimeError(f"Expected extracted .jp2 files and imp_ne6.img under {RAW}")
-    CACHE.mkdir(parents=True, exist_ok=True)
+    output = DEPLOYED if deployment else CACHE
+    output.mkdir(parents=True, exist_ok=True)
     sources = images + labels
     signature = [[str(p.relative_to(ROOT)), p.stat().st_size, p.stat().st_mtime_ns] for p in sources]
-    manifest = CACHE / "catalog.json"
+    manifest = output / "catalog.json"
     if manifest.exists():
         previous = json.loads(manifest.read_text())
         if previous.get("version") == CACHE_VERSION and previous.get("signature") == signature:
-            complete = all((CACHE / f"{t['id']}_{kind}.tif").exists()
-                           for t in previous["tiles"] for kind in ["image", "label"])
+            complete = all(
+                (ROOT / t[f"{kind}_path"] if f"{kind}_path" in t
+                 else output / f"{t['id']}_{kind}.tif").is_file()
+                for t in previous["tiles"] for kind in ["image", "label"]
+            )
             if complete:
                 return previous
 
@@ -71,10 +79,16 @@ def prepare():
                 bounds = list(source.bounds)
                 if source.count != 4:
                     raise RuntimeError(f"{path.name} must have four bands.")
-                pixels = source.read()
                 samples.append(source.read(out_shape=(4, 256, 256)).reshape(4, -1))
-                write_pyramid(CACHE / f"{path.stem}_image.tif", pixels, source.transform, source.crs)
-                del pixels
+                image_path = output / f"{path.stem}_image.tif"
+                if deployment:
+                    image_path = output / path.name
+                    for companion in path.parent.glob(f"{path.stem}.*"):
+                        shutil.copy2(companion, output / companion.name)
+                else:
+                    pixels = source.read()
+                    write_pyramid(image_path, pixels, source.transform, source.crs)
+                    del pixels
                 width = round(bounds[2] - bounds[0])
                 height = round(bounds[3] - bounds[1])
                 label_transform = from_bounds(*bounds, width, height)
@@ -90,15 +104,18 @@ def prepare():
                 valid_count = int(np.count_nonzero(valid))
                 if np.any(valid & ~np.isin(mask, [0, 1])):
                     raise RuntimeError("Unexpected label values in reference raster.")
-                write_pyramid(CACHE / f"{path.stem}_label.tif", mask[None], label_transform, source.crs, True)
+                label_path = output / f"{path.stem}_label.tif"
+                write_pyramid(label_path, mask[None], label_transform, source.crs, True)
                 result["tiles"].append({
                     "id": path.stem, "bounds": bounds, "width": source.width,
                     "height": source.height, "image_resolution": abs(source.res[0]),
                     "label_resolution": 1, "impervious_pixels": impervious,
                     "valid_pixels": valid_count,
                     "impervious_percent": 100 * impervious / valid_count if valid_count else None,
-                    "image_file": str(path.relative_to(ROOT)),
-                    "label_file": str(labels[0].relative_to(ROOT)),
+                    "image_file": path.relative_to(ROOT).as_posix(),
+                    "label_file": labels[0].relative_to(ROOT).as_posix(),
+                    "image_path": image_path.relative_to(ROOT).as_posix(),
+                    "label_path": label_path.relative_to(ROOT).as_posix(),
                 })
     all_samples = np.concatenate(samples, axis=1)
     useful = np.any(all_samples != 0, axis=0)
@@ -112,6 +129,40 @@ def prepare():
     temporary.write_text(json.dumps(result), encoding="utf-8")
     temporary.replace(manifest)
     return result
+
+
+def load_catalog():
+    manifest = DEPLOYED / "catalog.json"
+    if manifest.exists():
+        result = json.loads(manifest.read_text(encoding="utf-8"))
+        for tile in result["tiles"]:
+            for kind in ["image", "label"]:
+                if not (ROOT / tile[f"{kind}_path"]).is_file():
+                    raise RuntimeError("Deployment dataset is incomplete. Run python build.py.")
+        return result
+    if os.environ.get("VERCEL"):
+        raise RuntimeError("Deployment dataset is missing. Set Build Command to python build.py.")
+    return prepare()
+
+
+def dataset_path(tile, kind):
+    # Old local preview catalogs predate the portable dataset paths.
+    stored = tile.get(f"{kind}_path")
+    return ROOT / stored if stored else CACHE / f"{tile['id']}_{kind}.tif"
+
+
+@app.before_request
+def initialize_dataset():
+    global catalog
+    if not catalog:
+        with catalog_lock:
+            if not catalog:
+                catalog = load_catalog()
+
+
+@app.get("/api/health")
+def health():
+    return jsonify({"status": "ok", "tiles": len(catalog["tiles"]), "crs": "EPSG:26986"})
 
 
 def color_image(pixels, mode, enhanced):
@@ -150,7 +201,7 @@ def tile_pixels(tile, kind, bounds, size):
                     max(south, bounds[3] - bottom * resolution),
                     min(east, bounds[0] + right * resolution),
                     min(north, bounds[3] - top * resolution)]
-    with rasterio.open(CACHE / f"{tile['id']}_{kind}.tif") as source:
+    with rasterio.open(dataset_path(tile, kind)) as source:
         window = source.window(*intersection)
         output[:, top:bottom, left:right] = source.read(
             window=window, out_shape=(source.count, bottom - top, right - left),
@@ -215,7 +266,7 @@ def thumbnail(tile_id):
     tile = next((t for t in catalog["tiles"] if t["id"] == tile_id), None)
     if tile is None:
         abort(404)
-    with read_lock, rasterio.open(CACHE / f"{tile_id}_image.tif") as source:
+    with read_lock, rasterio.open(dataset_path(tile, "image")) as source:
         rgba = color_image(source.read(out_shape=(4, 128, 128)), "rgb", True)
     output = BytesIO()
     Image.fromarray(rgba).save(output, format="PNG")
@@ -237,10 +288,10 @@ def inspect_pixel():
     if tile is None:
         return jsonify({"covered": False})
     with read_lock:
-        with rasterio.open(CACHE / f"{tile['id']}_image.tif") as image:
+        with rasterio.open(dataset_path(tile, "image")) as image:
             row, col = image.index(east, north)
             values = image.read(window=Window(col, row, 1, 1))[:, 0, 0].tolist()
-        with rasterio.open(CACHE / f"{tile['id']}_label.tif") as label:
+        with rasterio.open(dataset_path(tile, "label")) as label:
             lr, lc = label.index(east, north)
             value = int(label.read(1, window=Window(lc, lr, 1, 1))[0, 0])
     lon, lat = transform_coordinates("EPSG:26986", "EPSG:4326", [east], [north])
@@ -257,7 +308,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--prepare", action="store_true")
     args = parser.parse_args()
-    catalog = prepare()
+    catalog = prepare() if args.prepare else load_catalog()
     print(f"Ready: {len(catalog['tiles'])} tiles. Viewer http://127.0.0.1:{args.port}", flush=True)
     if not args.prepare:
         app.run(host="127.0.0.1", port=args.port, threaded=True, use_reloader=False)

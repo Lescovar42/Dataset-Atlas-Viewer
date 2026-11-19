@@ -1,3 +1,9 @@
 .venv/
 data/
 __pycache__/
+.vercel/
+public/
+work/
+.env
+.env.*
+!.env.example

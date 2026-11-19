@@ -1,0 +1,13 @@
+{
+  "base_url": "https://s3.us-east-1.amazonaws.com/download.massgis.digital.mass.gov",
+  "imagery_documentation": "https://www.mass.gov/info-details/massgis-data-2005-aerial-imagery",
+  "label_documentation": "https://www.mass.gov/info-details/massgis-data-impervious-surface-2005",
+  "archives": [
+    {"path": "images/coq2005_hm_jp2_lossy/229898.zip", "sha256": "8fd6a19f841200c90ba954dc76bcf60d894040e23ce90b8a001ca87212ba7953"},
+    {"path": "images/coq2005_hm_jp2_lossy/233894.zip", "sha256": "05838167804898128fc938bef61598ce9d5dfa630d37d729e8b14321418cdd23"},
+    {"path": "images/coq2005_hm_jp2_lossy/233898.zip", "sha256": "21167c5b59542180494e4d92f8b0742b8a0a85fa708537cda343586b2311a10c"},
+    {"path": "images/coq2005_hm_jp2_lossy/237894.zip", "sha256": "9f44cc35c9de307df5d86ced9147206735ee1964f3c991d533fb78bb97fe486c"},
+    {"path": "images/coq2005_hm_jp2_lossy/237898.zip", "sha256": "5a2369f56ef467bfe735194b5634e2e9b57d25444faf1337972e70f571236db4"},
+    {"path": "images/impervious/imp_ne6.zip", "sha256": "75bdc1e061a343e93da9f739364d2928f0a5b31f17c116f282fc7433e2d65810"}
+  ]
+}
