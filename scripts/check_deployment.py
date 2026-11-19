@@ -1,7 +1,6 @@
 """Exercise the deployed entrypoint and compare its pixels with source data."""
 
 from io import BytesIO
-import json
 import os
 from pathlib import Path
 import sys
